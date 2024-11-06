@@ -1,0 +1,165 @@
+services:
+  ################### Traefik (reverse proxy) ##################
+  reverse-proxy:
+    image: traefik:3.1
+    container_name: reverse_proxy
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    command:
+      - "--configFile=/etc/traefik/static.yaml"
+    ports:
+      - 80:80
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./config/traefik/config/:/etc/traefik:ro
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.dashboard.entrypoints=web"
+      - "traefik.http.routers.dashboard.rule=Host(`traefik.localhost.local`)"
+      - "traefik.http.routers.dashboard.service=api@internal"
+      - "traefik.http.routers.dashboard.tls=false"
+      - "traefik.docker.network=proxy"
+      - "traefik.http.services.dashboard.loadbalancer.server.port=8080"
+    networks:
+      - proxy
+
+  ################### Vaultwarden (password manager) ################## 
+  vaultwarden:
+    image: vaultwarden/server:1.32.1
+    volumes:
+      - vaultwarden-data:/data
+    restart: unless-stopped
+    environment:
+        SMTP_HOST: ${SMTP_HOST}
+        SMTP_PORT: ${SMTP_PORT}
+        SMTP_USERNAME: ${SMTP_USERNAME}
+        SMTP_PASSWORD: ${SMTP_PASSWORD}
+        SMTP_FROM: ${SMTP_FROM}
+        SMTP_FROM_NAME: ${SMTP_FROM_NAME}
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.vw.entrypoints=web"
+      - "traefik.http.routers.vw.rule=Host(`vaultwarden.localhost.local`)"
+      - "traefik.http.routers.vw.tls=false"
+      - "traefik.docker.network=proxy"
+      - "traefik.http.services.vw.loadbalancer.server.port=80"
+    depends_on:
+      - reverse-proxy
+    networks:
+      - proxy
+
+  ################### Portainer (container management) ################## 
+  portainer:
+    image: portainer/portainer-ce:2.21.3
+    volumes:
+      - portainer-data:/data
+      - /var/run/docker.sock:/var/run/docker.sock
+    restart: unless-stopped
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.portainer.entrypoints=web"
+      - "traefik.http.routers.portainer.rule=Host(`portainer.localhost.local`)"
+      - "traefik.http.routers.portainer.tls=false"
+      - "traefik.docker.network=proxy"
+      - "traefik.http.services.portainer.loadbalancer.server.port=9000"
+    depends_on:
+      - reverse-proxy
+    networks:
+      - proxy
+
+  ################### Adminer (database client) ################## 
+  adminer:
+    image: adminer:4.8.1
+    restart: unless-stopped
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.adminer.entrypoints=web"
+      - "traefik.http.routers.adminer.rule=Host(`adminer.localhost.local`)"
+      - "traefik.http.routers.adminer.tls=false"
+      - "traefik.docker.network=proxy"
+      - "traefik.http.services.adminer.loadbalancer.server.port=8080"
+    depends_on:
+      - reverse-proxy
+    networks:
+      - proxy
+
+  ################### Node Exporter (prometheus hardware exporter) ################## 
+  node_exporter:
+    image: quay.io/prometheus/node-exporter:latest
+    container_name: node_exporter
+    command:
+      - '--path.rootfs=/host'
+    pid: host
+    restart: unless-stopped
+    volumes:
+      - '/:/host:ro,rslave'
+    networks:
+      - proxy
+
+  ################### Cadvisor (prometheus containers exporter) ################## 
+  cadvisor:
+    image: gcr.io/cadvisor/cadvisor:v0.51.0
+    container_name: cadvisor
+    volumes:
+      - /:/rootfs:ro
+      - /run:/run:ro
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
+      - /dev/disk/:/dev/disk:ro
+    devices:
+      - /dev/kmsg
+    privileged: true
+    restart: unless-stopped
+    networks:
+      - proxy
+
+  ################### Grafana (monitoring visual charts) ################## 
+  grafana:
+    image: docker.io/grafana/grafana-oss:11.3.0
+    container_name: grafana
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.grafana.entrypoints=web"
+      - "traefik.http.routers.grafana.rule=Host(`grafana.localhost.local`)"
+      - "traefik.http.routers.grafana.tls=false"
+      - "traefik.docker.network=proxy"
+      - "traefik.http.services.grafana.loadbalancer.server.port=3000"
+    volumes:
+      - grafana-data:/var/lib/grafana
+    restart: unless-stopped
+    networks:
+      - proxy
+
+  ################### Prometheus (monitoring data collector) ################## 
+  prometheus:
+    image: docker.io/prom/prometheus:v2.55.0
+    container_name: prometheus
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.prometheus.entrypoints=web"
+      - "traefik.http.routers.prometheus.rule=Host(`prometheus.localhost.local`)"
+      - "traefik.http.routers.prometheus.tls=false"
+      - "traefik.docker.network=proxy"
+      - "traefik.http.services.prometheus.loadbalancer.server.port=9090"
+    command: "--config.file=/etc/prometheus/prometheus.yaml"
+    volumes:
+      - ./config/prometheus/prometheus.yaml:/etc/prometheus/prometheus.yaml:ro
+      - prometheus-data:/prometheus
+    restart: unless-stopped
+    networks:
+      - proxy
+
+networks:
+  proxy:
+    external: true
+
+volumes:
+  grafana-data:
+    driver: local
+  prometheus-data:
+    driver: local
+  portainer-data:
+    driver: local
+  vaultwarden-data:
+    driver: local
