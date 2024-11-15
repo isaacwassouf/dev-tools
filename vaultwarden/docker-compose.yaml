@@ -1,0 +1,33 @@
+services:
+  ################### Vaultwarden (password manager) ################## 
+  vaultwarden:
+    image: vaultwarden/server:1.32.4
+    volumes:
+      - vaultwarden-data:/data
+    restart: unless-stopped
+    environment:
+        SMTP_HOST: ${VAULTWARDEN_SMTP_HOST}
+        SMTP_PORT: ${VAULTWARDEN_SMTP_PORT}
+        SMTP_USERNAME: ${VAULTWARDEN_SMTP_USERNAME}
+        SMTP_PASSWORD: ${VAULTWARDEN_SMTP_PASSWORD}
+        SMTP_FROM: ${VAULTWARDEN_SMTP_FROM}
+        SMTP_FROM_NAME: ${VAULTWARDEN_SMTP_FROM_NAME}
+        SIGNUPS_ALLOWED: ${VAULTWARDEN_SIGNUPS_ALLOWED}
+        DOMAIN: ${VAULTWARDEN_DOMAIN}
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.vw.entrypoints=web"
+      - "traefik.http.routers.vw.rule=Host(`vaultwarden.isaac-software.engineer`)"
+      - "traefik.http.routers.vw.tls=false"
+      - "traefik.docker.network=proxy"
+      - "traefik.http.services.vw.loadbalancer.server.port=80"
+    networks:
+      - proxy
+
+networks:
+  proxy:
+    external: true
+
+volumes:
+  vaultwarden-data:
+    driver: local

@@ -1,1 +1,8 @@
-.env
+**/.env
+
+immich/library
+immich/postgres
+
+authentik/media
+authentik/custom-templates
+authentik/certs
